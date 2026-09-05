@@ -52,9 +52,15 @@ sudo dnf install python3-tkinter python3-pip portaudio pulseaudio-utils
 sudo pacman -S tk python-pip portaudio libpulse
 ```
 
+Дальше — Python-пакеты. Ставь **в venv**, а не в систему: саундпад запускается под `sudo`, а root не видит твой `~/.local/lib`, и `import keyboard` упадёт.
+
 ```bash
-pip install -r requirements.txt
+cd ~/путь/до/Sound-Micro-Pad-FREE
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -r requirements.txt
 ```
+
+`--system-site-packages` обязателен — иначе venv не увидит системный `tkinter`, он ставится только пакетом дистрибутива.
 
 ### 2. Создать виртуальный микрофон
 
@@ -89,11 +95,17 @@ pactl load-module module-loopback source=@DEFAULT_SOURCE@ sink=soundpad latency_
 
 ### 4. Запуск
 
-`keyboard` на Linux читает `/dev/input` напрямую, поэтому **нужен root**:
+```bash
+./run.sh
+```
+
+`run.sh` сам подхватит `.venv`, если он есть, и перезапустится под `sudo` — `keyboard` на Linux читает `/dev/input` напрямую, поэтому **нужен root**. Вручную то же самое:
 
 ```bash
 sudo -E python3 main.py
 ```
+
+`run.bat` — только для Windows, на Linux он не запустится (`cmd.exe` нет).
 
 `-E` обязателен: без него потеряются `DISPLAY`/`XDG_RUNTIME_DIR`, и не откроется ни окно, ни звук.
 
@@ -104,9 +116,11 @@ sudo usermod -aG input $USER   # перелогиниться после
 ```
 
 В окне:
-- **В микрофон** — `Soundpad` (или `pulse` / `default`, если в списке нет отдельного sink).
+- **В микрофон** — `Soundpad`. В списке он подписан бэкендом, например `Soundpad (JACK Audio Connection Kit)` — это нормально, PipeWire отдаёт устройства через JACK. Не путай с `Soundpad_Mic`: тот вход, его читает игра.
 - **Себе в наушники** — свои колонки/наушники.
 - Дальше как в Windows: назначаешь клавиши, `ctrl+alt+s` — стоп.
+
+Если `Soundpad` в списке нет — бери `pulse` или `default`, а маршрут задай руками: `pavucontrol` → вкладка **Воспроизведение** → у процесса `python` выставь выход `Soundpad`.
 
 В игре / Discord микрофоном выбери **Soundpad_Mic**.
 
@@ -114,7 +128,10 @@ sudo usermod -aG input $USER   # перелогиниться после
 
 - **Пустой список устройств / ошибка PortAudio** — не поставлен `libportaudio2` (или `portaudio`). Проверь: `python3 -c "import sounddevice; print(sounddevice.query_devices())"`.
 - **Клавиши не ловятся** — запущено без root и юзер не в группе `input`. Под Wayland глобальные хуки работают только через `/dev/input`, то есть тоже требуют этих прав.
-- **`ImportError: No module named tkinter`** — поставь `python3-tk` (`python3-tkinter` на Fedora).
+- **`ModuleNotFoundError: No module named 'keyboard'` под sudo** — пакеты стоят у юзера, root их не видит. Собери venv (раздел 1) и запускай `./run.sh` — он берёт `.venv/bin/python`.
+- **`ImportError: No module named tkinter`** — поставь `python3-tk` (`python3-tkinter` на Fedora, `tk` на Arch).
+- **`ImportError: libtk8.6.so: cannot open shared object file`** — `tkinter` есть, самой Tk нет. Ставь пакет `tk` (Arch/openSUSE) или `tk` рядом с `python3-tk` (Debian). Проверка: `python3 -c "import tkinter; print(tkinter.TkVersion)"`. Если библиотека на диске лежит, но не находится — `ls /usr/lib/libtk*` и `sudo ldconfig`.
+- **`can't open file '.../http://main.py'`** — терминал принял `main.py` за адрес (`.py` — домен Парагвая) и приклеил `http://`. Не вставляй строку буфером: набери руками или жми Tab, либо пиши `./main.py`.
 - **Игра не видит Soundpad_Mic** — Steam/Discord во Flatpak: дай доступ через `flatpak override --user --socket=pulseaudio <app>` и выбери источник в `pavucontrol` → **Запись**.
 - **Хрипит/трещит** — снизь громкость выхода ниже 1.0 или подними `latency_msec` у loopback.
 
