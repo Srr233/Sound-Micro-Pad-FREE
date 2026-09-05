@@ -109,11 +109,17 @@ sudo -E python3 main.py
 
 `-E` обязателен: без него потеряются `DISPLAY`/`XDG_RUNTIME_DIR`, и не откроется ни окно, ни звук.
 
-Без sudo можно, если дать себе доступ к устройствам ввода (разово):
+Под X11 root по умолчанию не имеет доступа к твоему дисплею — окно просто не откроется. `run.sh` выдаёт доступ сам (`xhost +SI:localuser:root`) и забирает обратно при выходе.
+
+Под **Wayland** проброса нет: sudo-процесс окно не покажет. Лечится тем, что sudo вообще не нужен — дай себе доступ к устройствам ввода (разово):
 
 ```bash
-sudo usermod -aG input $USER   # перелогиниться после
+sudo usermod -aG input $USER
 ```
+
+Перелогинься по-настоящему (выйти из сессии, не просто закрыть терминал) и запускай `./run.sh` — он увидит группу `input` и пойдёт без sudo.
+
+Что у тебя за сессия: `echo $XDG_SESSION_TYPE`.
 
 В окне:
 - **В микрофон** — `Soundpad`. В списке он подписан бэкендом, например `Soundpad (JACK Audio Connection Kit)` — это нормально, PipeWire отдаёт устройства через JACK. Не путай с `Soundpad_Mic`: тот вход, его читает игра.
@@ -133,6 +139,7 @@ sudo usermod -aG input $USER   # перелогиниться после
 - **`ImportError: libtk8.6.so: cannot open shared object file`** — `tkinter` есть, самой Tk нет. Ставь пакет `tk` (Arch/openSUSE) или `tk` рядом с `python3-tk` (Debian). Проверка: `python3 -c "import tkinter; print(tkinter.TkVersion)"`. Если библиотека на диске лежит, но не находится — `ls /usr/lib/libtk*` и `sudo ldconfig`.
 - **`can't open file '.../http://main.py'`** — терминал принял `main.py` за адрес (`.py` — домен Парагвая) и приклеил `http://`. Не вставляй строку буфером: набери руками или жми Tab, либо пиши `./main.py`.
 - **Игра не видит Soundpad_Mic** — Steam/Discord во Flatpak: дай доступ через `flatpak override --user --socket=pulseaudio <app>` и выбери источник в `pavucontrol` → **Запись**.
+- **Окно не открывается, ошибок нет** — root не пущен к дисплею. Под X11: `xhost +SI:localuser:root`. Под Wayland: группа `input` вместо sudo (см. «Запуск»).
 - **Хрипит/трещит** — снизь громкость выхода ниже 1.0 или подними `latency_msec` у loopback.
 
 ## Форматы

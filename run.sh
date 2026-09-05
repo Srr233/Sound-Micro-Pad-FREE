@@ -3,28 +3,38 @@
 set -e
 cd "$(dirname "$0")"
 
-PY=python3
-[ -x .venv/bin/python ] && PY=.venv/bin/python
+if [ -x .venv/bin/python ]; then
+    PY="$PWD/.venv/bin/python"
+else
+    PY="$(command -v python3)"
+fi
 
-if [ "$(id -u)" -eq 0 ]; then
+# Уже root, либо есть доступ к /dev/input через группу — запускаемся напрямую.
+if [ "$(id -u)" -eq 0 ] || id -nG | tr ' ' '\n' | grep -qx input; then
     exec "$PY" main.py "$@"
 fi
 
-# В группе input? Тогда root не нужен — окно откроется в своей же сессии.
-if id -nG | tr ' ' '\n' | grep -qx input; then
-    exec "$PY" main.py "$@"
-fi
-
-# Иначе sudo. Под X11 root по умолчанию не имеет доступа к дисплею — выдаём его
-# на время запуска. Под Wayland проброс невозможен, нужен XWayland или группа input.
+# Дальше нужен sudo. Под X11 root не имеет доступа к дисплею — выдаём на время.
 if [ -n "${DISPLAY:-}" ] && command -v xhost >/dev/null; then
-    xhost +SI:localuser:root >/dev/null
+    xhost +SI:localuser:root >/dev/null 2>&1 || true
     trap 'xhost -SI:localuser:root >/dev/null 2>&1 || true' EXIT
-elif [ "${XDG_SESSION_TYPE:-}" = wayland ]; then
-    echo "Wayland без XWayland: окно из-под sudo не откроется." >&2
-    echo "Добавь себя в группу input и перелогинься:" >&2
-    echo "    sudo usermod -aG input \$USER" >&2
-    echo "После этого run.sh запустится без sudo." >&2
 fi
 
-sudo -E "$PY" main.py "$@"
+# Запуск из файлового менеджера: терминала нет, sudo спросить пароль негде.
+# pkexec рисует графическое окно пароля; env пробрасываем руками, он чистит окружение.
+if [ ! -t 0 ] && command -v pkexec >/dev/null; then
+    exec pkexec env \
+        DISPLAY="${DISPLAY:-}" \
+        XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+        PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse/native}" \
+        "$PY" "$PWD/main.py" "$@"
+fi
+
+if [ ! -t 0 ]; then
+    echo "Нет терминала и нет pkexec. Запусти из терминала: ./run.sh" >&2
+    exit 1
+fi
+
+exec sudo -E "$PY" main.py "$@"
